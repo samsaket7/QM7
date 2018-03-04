@@ -20,11 +20,11 @@ Z = dataset['Z']                                                                
 split = dataset['P']                                                               ##
 #####################################################################################
 
-
+#Creating representations
 CM_eigen = -np.sort(-np.linalg.eigvals(Columb_matrix))
 CM_sorted = matrix_2d_sort_fn(Columb_matrix,random=False)
 CM_randn_sorted = matrix_2d_sort_fn(Columb_matrix,random=True)
-
+CM_dict = {'CM_eigen':CM_eigen, 'CM_sorted':CM_sorted, 'CM_randn_sorted':CM_randn_sorted}
 
 ############################## PARAMTER SETUP #######################################
 #####################################################################################
@@ -35,37 +35,39 @@ params['M']                = 15                                                 
 params['no_epochs']        = 200                                                   ##
 params['batch_size']       = 50                                                    ##
 params['lrate']            = 0.01                                                  ## 
-params['representation']   = CM_eigen                                              ## 
+params['representation']   = 'CM_eigen'                                            ## 
 params['per_epoch_result'] = True                                                  ##
                                                                                    ##
 var_param = {}                                                                     ##
-var_param['name']  = 'lrate'                                                           ##
-var_param['value'] = [1,0.1,0.01,0.001]                                                 ##
+var_param['name']  = 'no_epochs'                                                   ##
+var_param['value'] = [2,3]                                                         ##
 params.pop(var_param['name'],None)                                                 ##
                                                                                    ##
 dump = {}                                                                          ##
 dump ['params']    = params     #for dumping purposes                              ##
 dump ['var_param'] = var_param  #for dumping purposes                              ##
 dump ['result']    = list()                                                        ##
-per_epoch_result   = True                                                          ##
 #####################################################################################
 
 
 for value in var_param['value']:
-
-    nolayers         = params.get('nolayers'      ,value)
-    n_hiddens        = params.get('n_hiddens'     ,value)
-    M                = params.get('M'             ,value)
-    no_epochs        = params.get('no_epochs'     ,value)
-    no_points_per_mb = params.get('batch_size'    ,value)
-    lrate            = params.get('lrate'         ,value)
-    CM               = params.get('representation',value) 
+    
+    #Init the local variables
+    nolayers         = params.get('nolayers'        ,value)
+    n_hiddens        = params.get('n_hiddens'       ,value)
+    M                = params.get('M'               ,value)
+    no_epochs        = params.get('no_epochs'       ,value)
+    no_points_per_mb = params.get('batch_size'      ,value)
+    lrate            = params.get('lrate'           ,value)
+    representation   = params.get('representation'  ,value) 
+    per_epoch_result = params.get('per_epoch_result',False)                                                          
    
-   #Convert CM into 2D matrix and n_pseudos
+    #Convert CM into 2D matrix and n_pseudos
+    CM = CM_dict[representation]
     CM = CM.reshape(CM.shape[0],-1)
     n_pseudos        = [M for _ in range(len(n_hiddens)+1)]
     
-    
+    #Create trainning and testing data
     X_train = CM[split[0:4].reshape(-1)]
     X_test = CM[split[4:5].reshape(-1)]
     y_train = Atomization[split[0:4].reshape(-1)]
@@ -96,5 +98,5 @@ for value in var_param['value']:
         result.update({'rms_list':test_rms,'mae_list':test_mae,'log_ll_list':test_nll})
     dump['result'].append(result)
 
-   
+#Write into the logs/file using pickle   
 pickle.dump(dump, open("logs/test."+var_param['name']+".p", "wb"))
