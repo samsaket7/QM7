@@ -15,32 +15,31 @@ np.random.seed(1234)
 dataset = scipy.io.loadmat('dataset/qm7.mat')                                              ##
 Columb_matrix = dataset['X']                                                       ##
 Atomization = dataset['T'].T                                                       ##
-Coords = dataset['R']                                                              ##
+R = dataset['R']                                                                   ##
 Z = dataset['Z']                                                                   ##
 split = dataset['P']                                                               ##
 #####################################################################################
-
-#Creating representations
-CM_eigen = -np.sort(-np.linalg.eigvals(Columb_matrix))
-CM_sorted = matrix_2d_sort_fn(Columb_matrix,random=False)
-CM_randn_sorted = matrix_2d_sort_fn(Columb_matrix,random=True)
-CM_dict = {'CM_eigen':CM_eigen, 'CM_sorted':CM_sorted, 'CM_randn_sorted':CM_randn_sorted}
+Columb_matrix_self=Columb_matrix_formation(Z,R)
+Columb_matrix = Columb_matrix_self
+print "Done Creating Columb_matrix_self"
 
 ############################## PARAMTER SETUP #######################################
 #####################################################################################
 params = {}                                                                        ##
 params['nolayers' ]        = 2                                                     ##
-params['n_hiddens']        = [5]                                                   ##
+params['n_hiddens']        = [2,5]                                                   ##
 params['M']                = 15                                                    ##
 params['no_epochs']        = 200                                                   ##
 params['batch_size']       = 50                                                    ##
 params['lrate']            = 0.01                                                  ## 
-params['representation']   = 'CM_eigen'                                            ## 
+params['representation']   = 'CM_randn_sorted'                                            ## 
 params['per_epoch_result'] = True                                                  ##
-                                                                                   ##
+params['randn_sorted_rep'] = 10
+params['randn_sorted_var'] = 1                                                     ##
+
 var_param = {}                                                                     ##
-var_param['name']  = 'no_epochs'                                                   ##
-var_param['value'] = [2,3]                                                         ##
+var_param['name']  = 'n_hiddens'                                                   ##
+var_param['value'] = [[2,5]]                                                        ##
 params.pop(var_param['name'],None)                                                 ##
                                                                                    ##
 dump = {}                                                                          ##
@@ -60,7 +59,30 @@ for value in var_param['value']:
     no_points_per_mb = params.get('batch_size'      ,value)
     lrate            = params.get('lrate'           ,value)
     representation   = params.get('representation'  ,value) 
+    randn_sorted_var = params.get('randn_sorted_var',value)                                                          
+    randn_sorted_rep = params.get('randn_sorted_rep',value)                                                          
     per_epoch_result = params.get('per_epoch_result',False)                                                          
+
+    #Creating representations
+    CM_eigen = -np.sort(-np.linalg.eigvals(Columb_matrix))
+    CM_sorted = matrix_2d_sort_fn(Columb_matrix,random=False)
+    CM_randn_sorted =matrix_2d_sort_fn(Columb_matrix,random=True)
+
+#------------------------ Creating mutliple copies of Dataset in case of sorted random --------------------------------#    
+#----------------------------------------------------------------------------------------------------------------------#    
+    if representation == 'CM_randn_sorted':                                                                           
+        for k in range(randn_sorted_rep-1):                                                                             
+            split           = np.append(split,dataset['P']+CM_randn_sorted.shape[0],axis=1)                           
+            CM_randn_sorted = np.append(CM_randn_sorted,matrix_2d_sort_fn(Columb_matrix,random=True),axis=0)          
+            Atomization     = np.append(Atomization,dataset['T'].T,axis=0)                                            
+    else:                                                                                                             
+            Atomization = dataset['T'].T                                                               
+            split = dataset['P']                                             
+#----------------------------------------------------------------------------------------------------------------------
+
+    CM_dict = {'CM_eigen':CM_eigen, 'CM_sorted':CM_sorted, 'CM_randn_sorted':CM_randn_sorted}
+
+
    
     #Convert CM into 2D matrix and n_pseudos
     CM = CM_dict[representation]
@@ -99,4 +121,4 @@ for value in var_param['value']:
     dump['result'].append(result)
 
 #Write into the logs/file using pickle   
-pickle.dump(dump, open("logs/test."+var_param['name']+".p", "wb"))
+pickle.dump(dump, open("logs/log_March7/test3."+var_param['name']+".p", "wb"))
