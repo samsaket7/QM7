@@ -39,6 +39,7 @@ class GP:
         self.normalise_y = normalise_y
         self.y_mean      = np.mean(self.y_train,axis=0)
         self.y_std       = np.std(self.y_train,axis=0)
+        self.sigman2     = 0
 
         if normalise_x:
             self.X_train = (self.X_train - np.mean(self.X_train,axis=0,keepdims=True))/np.std(self.X_train,axis=0,keepdims=True)
@@ -48,8 +49,8 @@ class GP:
     
     	self.params = {}
         self.params['Beta']    = 0.01*np.random.randn(D,1)
-    	self.params['sigma2']  = 10
-    	self.params['lmbda2']  = np.random.randn(D,1)+1
+    	self.params['sigma2']  = 1
+    	self.params['lmbda2']  = np.random.randn(D,1)*0.1+0.5
     
 # ----------------------------------------------------------
 # Param Update
@@ -60,17 +61,18 @@ class GP:
 
         return param
 
-    def momentum_update(self,param,grad,velocity,lrate,momentum):
-        velocity['x'] = velocity.get('x',np.zeros_like(param))
-        velocity['x'] = momentum*velocity['x'] - lrate*grad
-        param   = param+velocity['x']
+    def momentum_update(self,param,grad,velocity,lrate,momentum,key='x'):
+        velocity[key] = velocity.get(key,np.zeros_like(param))
+        velocity[key] = momentum*velocity[key] - lrate*grad
+        param   = param+velocity[key]
 
         return param,velocity
 
 
-    def train(self,X_test=None,y_test=None,lrate = 0.1,num_epochs=100,compute_test=True):
+    def train(self,X_test=None,y_test=None,lrate = 0.1,sigma = 0,num_epochs=100,compute_test=True):
     	X = self.X_train
     	y = self.y_train
+        self.sigman2 = sigma
         velocity = {}
     	for epoch in range(num_epochs):
             s2 = self.params['sigma2']
@@ -80,35 +82,37 @@ class GP:
             
             u     = self.compute_mean(X)
             K     = self.compute_covariance(X,X)
+            R     = K/s2
+            K     = K + self.sigman2*np.eye(K.shape[0])
             Dist  = self.compute_distance(X,X) 
             K_inv = inv(K)
-            R     = K/s2
-            R_inv = K_inv*s2
             
             assert u.shape     == (N,1)
             assert K.shape     == (N,N)
             assert Dist.shape  == (D,N,N)
             assert K_inv.shape == (N,N)
             assert R.shape     == (N,N)
-            assert R_inv.shape == (N,N)
             
             B      = np.dot(inv(multi_dot([X.T,K_inv,X])),multi_dot([X.T,K_inv,y]))
-            s2     = (1./N)*multi_dot([(y-u).T,R_inv,(y-u)])
-
+            ds2    = (1./2)*(np.trace(np.dot(K_inv,R)) - multi_dot([(y-u).T,K_inv,R,K_inv,y-u]))
             dl2 = np.zeros_like(l2)
+
 	    for i in range(D):	
-            	dl2[i]    = (1./4)*(-np.trace(np.dot(K_inv,K*Dist[i])) + multi_dot([(y-u).T,K_inv,K*Dist[i],K_inv,y-u]))
+            	dl2[i]    = (1./4)*(-np.trace(np.dot(K_inv,(R*s2)*Dist[i])) + multi_dot([(y-u).T,K_inv,(R*s2)*Dist[i],K_inv,y-u]))
                 
             assert B.shape   == (D,1)
-            assert s2.size   == 1
             assert dl2.size  == l2.size
+            assert ds2.size  == 1
            
             
-            #l2             = self.sgd_update(l2,dl2,lrate)
-            l2,velocity     = self.momentum_update(param=l2,grad=dl2,velocity=velocity,lrate=lrate,momentum=0.9)
+            l2             = self.sgd_update(l2,dl2,lrate)
+            s2             = self.sgd_update(s2,ds2,lrate)
+            #l2,velocity     = self.momentum_update(param=l2,grad=dl2,velocity=velocity,lrate=lrate,momentum=0.9,key='l2')
             l2              = np.absolute(l2)
+            #s2,velocity     = self.momentum_update(param=s2,grad=ds2,velocity=velocity,lrate=lrate,momentum=0.9,key='s2')
+            s2              = np.absolute(s2)
             
-            print 'epoch = ', epoch , 'Beta   = ' , B[0] , 'sigma  = ' , s2 , 'dlmda2 = ' , dl2.min() ,'lmbda2 = ' , l2.min()
+            print 'epoch = ', epoch , 'Beta   = ' , B[0] , 'sigma  = ' , s2 , 'dlmda2 = ' , dl2.mean() ,'lmbda2 = ' , l2.mean()
             
             self.params['Beta']   = B
             self.params['sigma2'] = s2
@@ -137,6 +141,7 @@ class GP:
     	ux      = self.compute_mean(X_train) 
     	uy      = self.compute_mean(X_test)
     	Kxx     = self.compute_covariance(X_train,X_train)
+        Kxx     = Kxx + self.sigman2*np.eye(Kxx.shape[0])
     	Kxy     = self.compute_covariance(X_train,X_test)
     	Kyy     = self.compute_covariance(X_test ,X_test)
     	Kxx_inv	= inv(Kxx)		

@@ -4,6 +4,7 @@ import sys
 import scipy.io
 sys.path.append('../code/')
 import GP
+import noisy_GP
 import time
 import pickle
 from utils import *
@@ -24,13 +25,14 @@ split = dataset['P']                                                            
 ############################## PARAMTER SETUP #######################################
 #####################################################################################
 params = {}                                                                        ##
-params['num_epochs']       = 5                                                  ## 
+params['num_epochs']       = 5000                                                  ## 
 params['representation']   = 'CM_eigen'                                            ## 
-params['lrate']            = 1e-2                                                  ##
+params['lrate']            = 1                                                  ##
+params['sigma']            = 0                                                  ## 
 
 var_param = {}                                                                     ##
 var_param['name']  = 'lrate'                                                   ##
-var_param['value'] = [1e-2]                                                        ##
+var_param['value'] = [1e-3]                                                        ##
 params.pop(var_param['name'],None)                                                 ##
                                                                                    ##
 dump = {}                                                                          ##
@@ -45,6 +47,7 @@ for value in var_param['value']:
     #Init the local variables
     num_epochs            = params.get('num_epochs'           ,value)
     lrate                 = params.get('lrate'                ,value)
+    sigma                 = params.get('sigma'           ,value)
     representation        = params.get('representation'       ,value) 
 
     #Creating representations
@@ -75,9 +78,9 @@ for value in var_param['value']:
     
 	 
     #Create trainning and testing data
-    X_train = CM[split[0:1].reshape(-1)]
+    X_train = CM[split[0:2].reshape(-1)]
     X_test = CM[split[4:5].reshape(-1)]
-    y_train = Atomization[split[0:1].reshape(-1)]
+    y_train = Atomization[split[0:2].reshape(-1)]
     y_test =  Atomization[split[4:5].reshape(-1)]
     
    # print "X_train.shape = ", X_train.shape
@@ -86,9 +89,9 @@ for value in var_param['value']:
    # print "y_test.shape  = ", y_test.shape
     
     # We construct the network
-    net = GP.GP(X_train = X_train, y_train = y_train)
+    net = noisy_GP.GP(X_train = X_train, y_train = y_train)
     # train
-    net.train(X_train,y_train,num_epochs=num_epochs,lrate=lrate,compute_test=True)
+    net.train(X_test,y_test,num_epochs=num_epochs,lrate=lrate,sigma=sigma,compute_test=True)
 
     # We make predictions for the test set
     m_test = net.predict(X_test)
@@ -106,4 +109,5 @@ for value in var_param['value']:
 
 #Write into the logs/file using pickle   
 pickle.dump(dump, open("logs/log_March7/testK1."+var_param['name']+".p", "wb"))
+
 
